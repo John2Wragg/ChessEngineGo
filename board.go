@@ -78,10 +78,10 @@ func (b *Board) SetPiece(row, col int, piece Piece) {
 func (b *Board) Display() {
 	pieceSymbols := map[int]map[int]string{
 		White: {
-			Empty: ".", Pawn: "P", Rook: "R", Knight: "K", Bishop: "B", Queen: "Q", King: "K",
+			Empty: ".", Pawn: "P", Rook: "R", Knight: "N", Bishop: "B", Queen: "Q", King: "K",
 		},
 		Black: {
-			Empty: ".", Pawn: "p", Rook: "r", Knight: "k", Bishop: "b", Queen: "q", King: "k",
+			Empty: ".", Pawn: "p", Rook: "r", Knight: "n", Bishop: "b", Queen: "q", King: "k",
 		},
 	}
 	fmt.Println(" a b c d e f g h")
@@ -221,4 +221,197 @@ func (b *Board) GeneratePawnMoves(row, col int, moves *[]Move) {
 		}
 
 	}
+}
+
+func (b *Board) GenerateRookMoves(row, col int, moves *[]Move) {
+	piece := b.GetPiece(row, col)
+	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} // Up down left right
+
+	for _, dir := range directions {
+		for distance := 1; distance < 8; distance++ {
+			newRow := row + dir[0]*distance
+			newCol := col + dir[1]*distance
+
+			if !IsValidSquare(newRow, newCol) {
+				break
+			}
+
+			target := b.GetPiece(newRow, newCol)
+			if target.Type == Empty {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType: Rook,
+				}
+				*moves = append(*moves, move)
+			} else if target.Color != piece.Color {
+				// Oppositon piece, can capture
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType:     Rook,
+					CapturedPiece: target,
+					IsCapture:     true,
+				}
+				*moves = append(*moves, move)
+				break // cant move any further in this direction
+			} else {
+				// Own piece can't move
+				break
+			}
+		}
+	}
+}
+
+// Bishop moves
+
+func (b *Board) GenerateBishopMoves(row, col int, moves *[]Move) {
+	piece := b.GetPiece(row, col)
+	directions := [][]int{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}} // Diagonals
+
+	for _, dir := range directions {
+		for distance := 1; distance < 8; distance++ {
+			newRow := row + dir[0]*distance
+			newCol := col + dir[1]*distance
+
+			if !IsValidSquare(newRow, newCol) {
+				break
+			}
+
+			target := b.GetPiece(newRow, newCol)
+			if target.Type == Empty {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType: Bishop,
+				}
+				*moves = append(*moves, move)
+			} else if target.Color != piece.Color {
+				// capture
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType:     Bishop,
+					CapturedPiece: target,
+					IsCapture:     true,
+				}
+				*moves = append(*moves, move)
+				break
+			} else {
+				break
+			}
+
+		}
+
+	}
+}
+
+// Queen moves
+
+func (b *Board) GenerateQueenMoves(row, col int, moves *[]Move) {
+	b.GenerateBishopMoves(row, col, moves) // Queen moves like both a rook and bishop
+	b.GenerateRookMoves(row, col, moves)
+}
+
+// Knight moves
+func (b *Board) GenerateKnightMoves(row, col int, moves *[]Move) {
+	piece := b.GetPiece(row, col)
+	knightMoves := [][]int{
+		{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1},
+	}
+
+	for _, delta := range knightMoves {
+		newRow := row + delta[0]
+		newCol := col + delta[1]
+
+		if IsValidSquare(newRow, newCol) {
+			target := b.GetPiece(newRow, newCol)
+			if target.Type == Empty {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType: Knight,
+				}
+				*moves = append(*moves, move)
+			} else if target.Color != piece.Color {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType:     Knight,
+					CapturedPiece: target,
+					IsCapture:     true,
+				}
+				*moves = append(*moves, move)
+
+			}
+		}
+
+	}
+}
+
+// King moves
+
+func (b *Board) GenerateKingMoves(row, col int, moves *[]Move) {
+	piece := b.GetPiece(row, col)
+	kingMoves := [][]int{
+		{-1, -1}, {-1, 0}, {-1, 1},
+		{0, -1}, {0, 1}, {1, -1}, {1, 0},
+		{1, 1},
+	}
+	for _, delta := range kingMoves {
+		newRow := row + delta[0]
+		newCol := col + delta[1]
+
+		if IsValidSquare(row, col) {
+			target := b.GetPiece(newRow, newCol)
+			if target.Type == Empty {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType: King,
+				}
+				*moves = append(*moves, move)
+			} else if target.Color != piece.Color {
+				move := Move{
+					FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType:     King,
+					CapturedPiece: target,
+					IsCapture:     true,
+				}
+				*moves = append(*moves, move)
+			}
+		}
+	}
+}
+
+// Generate all moves
+
+func (b *Board) GenerateAllMoves(color int) []Move {
+	var moves []Move
+
+	for row := 0; row < 8; row++ {
+		for col := 0; col < 8; col++ {
+			piece := b.GetPiece(row, col)
+
+			if piece.Type != Empty && piece.Color == color {
+				switch piece.Type {
+				case Pawn:
+					b.GeneratePawnMoves(row, col, &moves)
+				case Rook:
+					b.GenerateRookMoves(row, col, &moves)
+				case Bishop:
+					b.GenerateBishopMoves(row, col, &moves)
+				case Knight:
+					b.GenerateKnightMoves(row, col, &moves)
+				case Queen:
+					b.GenerateQueenMoves(row, col, &moves)
+				case King:
+					b.GenerateKingMoves(row, col, &moves)
+				}
+			}
+		}
+
+	}
+	return moves
 }
