@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Pieces
 const (
@@ -414,4 +416,194 @@ func (b *Board) GenerateAllMoves(color int) []Move {
 
 	}
 	return moves
+}
+
+// Find King
+func (b *Board) FindKing(color int) (int, int) {
+	for row := 0; row < 8; row++ {
+		for col := 0; col < 8; col++ {
+			piece := b.GetPiece(row, col)
+			if piece.Type == King && piece.Color == color {
+				return row, col
+			}
+		}
+	}
+	return -1, -1 // Should never happen
+}
+
+// Is Square attacked -0 checks if square is under attack by given color
+
+func (b *Board) IsSquareAttacked(row, col, attackingColor int) bool {
+	// Check for pawn attacks
+	pawnDirection := 1
+
+	if attackingColor == Black {
+		pawnDirection = -1
+	}
+	// Check diagonal pawn attack
+	for _, deltaCol := range []int{-1, 1} {
+		pawnRow := row + pawnDirection
+		pawnCol := col + deltaCol
+		if IsValidSquare(pawnRow, pawnCol) {
+			piece := b.GetPiece(pawnRow, pawnCol)
+			if piece.Type == Pawn && piece.Color == attackingColor {
+				return true
+			}
+		}
+	}
+	// Check Knight attacks
+	knightMoves := [][]int{
+		{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1},
+	}
+
+	for _, delta := range knightMoves {
+		knightRow := row + delta[0]
+		knightCol := col + delta[1]
+		if IsValidSquare(knightRow, knightCol) {
+			piece := b.GetPiece(knightRow, knightCol)
+			if piece.Type == Knight && piece.Color == attackingColor {
+				return true
+			}
+		}
+	}
+
+	// Check sliding attacks rook bishop queen
+	directions := [][]int{
+		{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1},
+	}
+
+	for i, dir := range directions {
+		for distance := 1; distance < 8; distance++ {
+			checkRow := row + dir[0]
+			checkCol := col + dir[1]
+
+			if IsValidSquare(checkRow, checkCol) {
+				break
+			}
+
+			piece := b.GetPiece(checkRow, checkCol)
+			if piece.Type != Empty {
+				if piece.Color == attackingColor {
+					if i < 4 { // rook directions
+						if piece.Type == Rook || piece.Type == Queen {
+							return true
+						} else { // bishop directions
+							if piece.Type == Bishop || piece.Type == Queen {
+								return true
+							}
+						}
+					}
+					break // piece blocks further movement in direction
+				}
+
+			}
+		}
+	}
+	kingMoves := [][]int{
+		{-1, -1}, {-1, 0}, {-1, 1},
+		{0, -1}, {0, 1}, {1, -1},
+		{1, 0}, {1, 1},
+	}
+
+	for _, delta := range kingMoves {
+		kingRow := row + delta[0]
+		kingCol := col + delta[1]
+
+		if IsValidSquare(kingRow, kingCol) {
+			piece := b.GetPiece(kingRow, kingCol)
+			if piece.Type == King && piece.Color == attackingColor {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Is in check cheks whether that colors king is in check
+
+func (b *Board) IsInCheck(color int) bool {
+	kingRow, kingCol := b.FindKing(color)
+	if kingRow == -1 {
+		return false // No king found - should never happen
+	}
+
+	enemyColor := Black
+	if color == Black {
+		enemyColor = White
+	}
+
+	return b.IsSquareAttacked(kingRow, kingCol, enemyColor)
+}
+
+// Copy board - deep copy of game
+
+func (b *Board) Copy() *Board {
+	newBoard := &Board{}
+	for row := 0; row < 8; row++ {
+		for col := 0; col < 8; col++ {
+			newBoard.squares[row][col] = b.squares[row][col]
+		}
+	}
+	return newBoard
+}
+
+func (b *Board) IsLegalMove(move Move, color int) bool {
+	testBoard := b.Copy()
+	testBoard.MakeMove(move)
+
+	return !testBoard.IsInCheck(color)
+}
+
+// Generate all legal moves for color
+
+func (b *Board) GenerateLegalMoves(color int) []Move {
+	pseudoLegalMoves := b.GenerateAllMoves(color)
+	var legalMoves []Move
+	for _, move := range pseudoLegalMoves {
+		if b.IsLegalMove(move, color) {
+			legalMoves = append(legalMoves, move)
+		}
+	}
+	return legalMoves
+}
+
+// Game state detection
+// Is checkmate
+func (b *Board) IsCheckmate(color int) bool {
+	if !b.IsInCheck(color) {
+		return false
+	}
+
+	legalMoves := b.GenerateLegalMoves(color)
+	return len(legalMoves) == 0 // If true, then no available moves to player
+}
+
+func (b *Board) IsStaleMate(color int) bool {
+	if b.IsInCheck(color) {
+		return false
+	}
+	legalMoves := b.GenerateLegalMoves(color)
+	return len(legalMoves) == 0
+
+}
+
+// Get game result
+
+func (b *Board) GetGameResult(currentPlayer int) string {
+	if b.IsCheckmate(currentPlayer) {
+		if currentPlayer == White {
+			return "Black wins by checkmate"
+		}
+		return "White wins by checkmate"
+	}
+
+	if b.IsStaleMate(currentPlayer) {
+		return "Draw by stalemate"
+	}
+
+	if b.IsInCheck(currentPlayer) {
+		return "Check"
+	}
+
+	return "Game continues!"
 }
