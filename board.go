@@ -98,3 +98,127 @@ func (b *Board) Display() {
 	fmt.Println(" a b c d e f g h")
 
 }
+
+// Adding moves
+type Move struct {
+	FromRow, FromCol int
+	ToRow, ToCol     int
+	PieceType        int
+	CapturedPiece    Piece
+	IsCapture        bool
+	IsEnPassant      bool
+	IsCastle         bool
+	PromotionPiece   int
+}
+
+// String to return readable version of move
+func (m Move) String() string {
+	files := "abcdefgh"
+	fromSquare := fmt.Sprintf("%c%d", files[m.FromCol], 8-m.FromRow)
+	toSquare := fmt.Sprintf("%c%d", files[m.ToCol], 8-m.ToRow)
+	return fromSquare + toSquare
+}
+
+// Make move executes a move on the board
+func (b *Board) MakeMove(move Move) {
+	piece := b.GetPiece(move.FromRow, move.FromCol)
+
+	b.SetPiece(move.FromRow, move.FromCol, Piece{Empty, White})
+
+	// Place piece at new destination
+	if move.PromotionPiece != Empty {
+		// Handle pawn promotion
+		b.SetPiece(move.ToRow, move.ToCol, Piece{move.PromotionPiece, piece.Color})
+	} else {
+		b.SetPiece(move.ToRow, move.ToCol, piece)
+	}
+}
+
+// Checks if coordinates are within board
+func IsValidSquare(row, col int) bool {
+	return row >= 0 && row < 8 && col >= 0 && col < 8
+}
+
+// Adding moves
+// Generate Pawn Moves
+func (b *Board) GeneratePawnMoves(row, col int, moves *[]Move) {
+	piece := b.GetPiece(row, col)
+	direction := -1 // white moves up the board (decreasing row numbers)
+	startRow := 6
+
+	if piece.Color == Black {
+		direction = 1
+		startRow = 1
+	}
+
+	// Forward move
+	newRow := row + direction
+	if IsValidSquare(newRow, col) && b.GetPiece(newRow, col).Type == Empty {
+		move := Move{
+			FromRow: row, FromCol: col,
+			ToRow: newRow, ToCol: col,
+			PieceType: Pawn,
+		}
+
+		// Checking for promotion
+		if (piece.Color == White && newRow == 0) || (piece.Color == Black && newRow == 7) {
+			promotionPieces := []int{Queen, Rook, Bishop, Knight}
+			for _, promoPiece := range promotionPieces {
+				promoMove := move
+				promoMove.PromotionPiece = promoPiece
+				*moves = append(*moves, promoMove)
+			}
+		} else {
+			*moves = append(*moves, move)
+
+			// if starting can double move
+			if row == startRow {
+				doubleRow := 2 * direction
+				if IsValidSquare(doubleRow, col) && b.GetPiece(doubleRow, col).Type == Empty {
+					doubleMove := Move{
+						FromRow: row, FromCol: col,
+						ToRow: doubleRow, ToCol: col,
+						PieceType: Pawn,
+					}
+					*moves = append(*moves, doubleMove)
+				}
+			}
+		}
+
+	}
+
+	// Capture moves
+	for _, deltaCol := range []int{-1, 1} {
+		newRow := row + direction
+		newCol := col + deltaCol
+
+		if IsValidSquare(newRow, newCol) {
+			target := b.GetPiece(newRow, newCol)
+			if target.Type != Empty && target.Color != piece.Color {
+				move := Move{FromRow: row, FromCol: col,
+					ToRow: newRow, ToCol: newCol,
+					PieceType:     Pawn,
+					CapturedPiece: target,
+					IsCapture:     true,
+				}
+
+				// Check for promotion
+				if (piece.Color == White && newRow == 0) || (piece.Color == Black && newRow == 7) {
+					promotionPieces := []int{Queen, Rook, Bishop, Knight}
+					for _, promoPiece := range promotionPieces {
+						promoMove := move
+						promoMove.PromotionPiece = promoPiece
+						*moves = append(*moves, promoMove)
+
+					}
+
+				} else {
+					*moves = append(*moves, move)
+
+				}
+			}
+
+		}
+
+	}
+}
