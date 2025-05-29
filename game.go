@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // GameState holds the state of the chess match
 type GameState struct {
 	Board           *Board
@@ -31,7 +33,7 @@ func NewGame() *GameState {
 }
 
 // Create copy of game state (deep copy)
-func Copy(g *GameState) *GameState {
+func (g *GameState) Copy() *GameState {
 	newGame := &GameState{
 		Board:           g.Board.Copy(),
 		CurrentPlayer:   g.CurrentPlayer,
@@ -150,6 +152,320 @@ func (g *GameState) GenerateCastlingMoves(moves *[]Move) {
 		*moves = append(*moves, move)
 	}
 
-	// Generateepassant moves page 31
+}
+
+func (g *GameState) GenerateEnPassantMoves(moves *[]Move) {
+	if g.EnPassantSquare[0] == -1 {
+		return // No EnPassant possible
+	}
+
+	targetRow := g.EnPassantSquare[0]
+	targetCol := g.EnPassantSquare[1]
+	color := g.CurrentPlayer
+
+	// Find pawns that can capture enpassant
+	pawnRow := targetRow + 1
+	if color == Black {
+		pawnRow = targetRow - 1
+	}
+
+	// Check left and right adjacent squares
+	for _, deltaCol := range []int{-1, 1} {
+		pawnCol := targetCol + deltaCol
+		if IsValidSquare(pawnRow, pawnCol) {
+			piece := g.Board.GetPiece(pawnRow, pawnCol)
+			if piece.Type == Pawn && piece.Color == color {
+				move := Move{FromRow: pawnRow, FromCol: pawnCol, ToRow: targetRow, ToCol: targetCol,
+					PieceType: Pawn, IsEnPassant: true, IsCapture: true,
+				}
+
+				*moves = append(*moves, move)
+			}
+		}
+	}
+
+}
+
+// Generate all legal moves including special moves
+
+func (g *GameState) GenerateAllLegalMoves() []Move {
+	moves := g.Board.GenerateAllMoves(g.CurrentPlayer)
+
+	// Adding castling moves
+	g.GenerateCastlingMoves(&moves) // can you explain how this works. It just appends the moves
+
+	// Adding en passant moves
+	g.GenerateEnPassantMoves(&moves)
+
+	// filter legal moves
+	var legalMoves []Move
+	for _, move := range moves {
+		if g.IsLegalMove(move) { // check this function
+			legalMoves = append(legalMoves, move)
+		}
+	}
+
+	return legalMoves
+}
+
+// Legal move from gamestate
+
+func (g *GameState) IsLegalMove(move Move) bool {
+	// Make a copy of game and try the move
+
+	testGame := g.Copy()
+	testGame.makeMove(move)
+
+	return !testGame.Board.IsInCheck(g.CurrentPlayer)
+}
+
+// Make move executes move and updates game state - helper function
+func (g *GameState) makeMove(move Move) {
+	// Handle castling
+	if move.IsCastle {
+		// Move king
+		g.Board.MakeMove(move)
+
+		// Move rook
+		row := move.FromRow
+		if move.ToCol == 6 { // Kingside
+			rookMove := Move{
+				FromRow: row, FromCol: 7,
+				ToRow: row, ToCol: 5,
+				PieceType: Rook,
+			}
+			g.Board.MakeMove(rookMove)
+		} else {
+			// Queenside castling
+			rookMove := Move{
+				FromRow: row, FromCol: 0,
+				ToRow: row, ToCol: 3,
+				PieceType: Rook,
+			}
+			g.Board.MakeMove(rookMove)
+		}
+
+		return
+
+	}
+	if move.IsEnPassant {
+		g.Board.MakeMove(move)
+
+		// Remove Captured Pawn
+		capturedRow := move.ToRow + 1
+		if g.CurrentPlayer == Black {
+			capturedRow = move.ToRow - 1
+		}
+		g.Board.SetPiece(capturedRow, capturedRow, Piece{Empty, White})
+
+		return
+	}
+
+	// Regular move
+
+	g.Board.MakeMove(move)
+}
+
+// Make move exceutes move and updates whole game state
+func (g *GameState) MakeMove(move Move) bool {
+	// Verify move is legal
+	legalMoves := g.GenerateAllLegalMoves()
+	isLegal := false
+
+	for _, legalMove := range legalMoves {
+		if move.FromRow == legalMove.FromRow && move.FromCol == legalMove.FromCol &&
+			move.ToRow == legalMove.ToRow && move.ToCol == legalMove.ToCol {
+			move = legalMove
+			isLegal = true
+			break
+		}
+	}
+
+	if !isLegal {
+		return false
+	}
+
+	// Update castling rights
+	if move.PieceType == King {
+		if g.CurrentPlayer == White {
+			g.WhiteCanCastleK = false
+			g.WhiteCanCastleQ = false
+		} else {
+			g.BlackCanCastleK = false
+			g.BlackCanCastleQ = false
+		}
+
+	}
+
+	if move.PieceType == Rook {
+		if g.CurrentPlayer == White {
+			if move.FromRow == 7 && move.FromCol == 0 {
+				g.WhiteCanCastleQ = false
+			} else if move.FromRow == 7 && move.FromCol == 7 {
+				g.WhiteCanCastleK = false
+			}
+		} else {
+			if move.FromRow == 0 && move.FromCol == 0 {
+				g.BlackCanCastleQ = false
+			} else if move.FromRow == 0 && move.FromCol == 7 {
+				g.BlackCanCastleK = false
+			}
+		}
+	}
+
+	// Update Enpassant square
+	g.EnPassantSquare = [2]int{-1, -1}
+
+	if move.PieceType == Pawn && abs(move.ToRow-move.ToCol) == 2 {
+		// double pawn move -> set enpassant square
+		g.EnPassantSquare[0] = (move.FromRow - move.ToRow) / 2
+		g.EnPassantSquare[1] = move.FromCol
+
+	}
+
+	// Update half move clock
+	if move.PieceType == Pawn || move.IsCapture {
+		g.HalfMoveClock = 0
+	} else {
+		g.HalfMoveClock++
+	}
+
+	// Execute move
+	g.makeMove(move)
+
+	// Update move history
+	g.MoveHistory = append(g.MoveHistory, move)
+
+	// Update current player
+	g.CurrentPlayer = 1 - g.CurrentPlayer
+
+	// update full move number
+	if g.CurrentPlayer == White {
+		g.FullMoveNumber++
+	} // white starts so increment move each time it's white
+
+	return true
+
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+
+	return x
+}
+
+// Is Over checks if game has ended
+
+func (g *GameState) IsGameOver() (bool, string) {
+	legalMoves := g.GenerateAllLegalMoves()
+
+	if len(legalMoves) == 0 {
+		if g.Board.IsInCheck(g.CurrentPlayer) {
+			// Checkmate
+			winner := "White"
+			if g.CurrentPlayer == White {
+				winner = "Black"
+			}
+			return true, winner + "Wins by checkmate!"
+		} else {
+			// Stalemate
+			return true, "Draw by stalemate."
+		}
+	}
+
+	// 50 mve rule
+	if g.HalfMoveClock >= 100 { // 50 moves each
+		return true, "Draw by 50 move rule"
+	}
+
+	return false, ""
+
+}
+
+// Return current player as string
+
+func (g *GameState) GetCurrentPlayerString() string {
+	if g.CurrentPlayer == White {
+		return "White"
+	}
+
+	return "Black"
+}
+
+// Parse move converts algebraic notation to a Move struct
+func (g *GameState) ParseMove(notation string) (Move, bool) {
+	notation = strings.TrimSpace(notation)
+
+	if notation == "O-O" || notation == "0-0" {
+		// kingside castling
+		row := 7
+		if g.CurrentPlayer == Black {
+			row = 0
+		}
+
+		return Move{
+			FromRow: row, FromCol: 4,
+			ToRow: row, ToCol: 6,
+			PieceType: King,
+			IsCastle:  true,
+		}, true
+	}
+	if notation == "O-O-O" || notation == "0-0-0" {
+		// Queenside castling
+		row := 7
+		if g.CurrentPlayer == Black {
+			row = 0
+		}
+
+		return Move{
+			FromRow: row, FromCol: 4,
+			ToRow: row, ToCol: 2,
+			PieceType: King,
+			IsCastle:  true,
+		}, true
+	}
+
+	// Simple format e2e4
+
+	if len(notation) >= 4 {
+		files := "abcdefgh"
+
+		fromCol := strings.IndexByte(files, notation[0])
+		fromRow := 8 - int(notation[1]-'O') // What does this mean?
+		toCol := strings.IndexByte(files, notation[2])
+		toRow := 8 - int(notation[3]-'O')
+
+		if fromCol >= 0 && fromRow >= 0 && fromRow < 8 && toCol >= 0 &&
+			toRow >= 0 && toRow < 8 {
+			piece := g.Board.GetPiece(fromRow, fromCol)
+			move := Move{
+				FromRow: fromRow, FromCol: fromCol,
+				ToRow: toRow, ToCol: toCol,
+				PieceType: piece.Type,
+			}
+
+			// Check promotion
+
+			if len(notation) >= 5 && piece.Type == Pawn {
+				switch notation[4] {
+				case 'q', 'Q':
+					move.PromotionPiece = Queen
+				case 'r', 'R':
+					move.PromotionPiece = Rook
+				case 'n', 'N':
+					move.PromotionPiece = Knight
+				case 'b', 'B':
+					move.PromotionPiece = Bishop
+				}
+			}
+
+			return move, true
+		}
+
+	}
+
+	return Move{}, false
 
 }
