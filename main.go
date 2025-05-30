@@ -8,9 +8,9 @@ import (
 )
 
 func main() {
-	fmt.Println("Chess Engine v1.4")
+	fmt.Println("Chess Engine v1.5")
 	fmt.Println("===================")
-	fmt.Println("Commands: move (e.g. e2e4), quit, moves, help")
+	fmt.Println("Commands: move, eval, quit, moves, help")
 
 	game := NewGame()
 	scanner := bufio.NewScanner(os.Stdin)
@@ -18,7 +18,19 @@ func main() {
 	for {
 		// Display current positon
 		game.Board.Display()
-		fmt.Printf("\n%s to move", game.GetCurrentPlayerString())
+		eval := game.EvaluatePosition()
+		fmt.Printf("\nPosition evaluation %+d centipawns", eval)
+
+		if eval > 0 {
+			fmt.Println("White is better")
+		} else if eval < 0 {
+			fmt.Println("Black is better")
+		} else {
+			fmt.Println("Equal position")
+		}
+		fmt.Println()
+
+		fmt.Printf("%s to move", game.GetCurrentPlayerString())
 
 		// Check status
 		if gameOver, result := game.IsGameOver(); gameOver {
@@ -43,6 +55,34 @@ func main() {
 		case "quit", "q":
 			fmt.Println("Thanks for playing!")
 			return
+		case "eval", "e":
+			eval := game.EvaluatePosition()
+			phase := game.GetGamePhase()
+			isEndgame := game.isEndgame()
+
+			fmt.Printf("Detailed evaluation\n")
+			fmt.Printf("	Total Score %+d centipawns\n", eval)
+			fmt.Printf("	Game Phase: %.2f (1.0=opening 0.0=endgame)\n", phase)
+			fmt.Printf("	Is endgame: %t\n", isEndgame)
+
+			// Count material
+			whiteMaterial, blackMaterial := 0, 0
+			for row := 0; row < 8; row++ {
+				for col := 0; col < 8; col++ {
+					piece := game.Board.GetPiece(row, col)
+					if piece.Type != Empty {
+						if piece.Color == White {
+							whiteMaterial += PieceValues[piece.Type]
+						} else {
+							blackMaterial += PieceValues[piece.Type]
+						}
+					}
+				}
+			}
+			fmt.Printf(" White material: %d\n", whiteMaterial)
+			fmt.Printf(" Black material: %d\n", blackMaterial)
+			fmt.Printf(" Material difference: %+d\n", whiteMaterial-blackMaterial)
+
 		case "moves", "m":
 			moves := game.GenerateAllLegalMoves()
 			fmt.Printf("Legal moves (%d:)\n", len(moves))
