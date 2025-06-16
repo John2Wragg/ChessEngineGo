@@ -433,9 +433,9 @@ func (g *GameState) ParseMove(notation string) (Move, bool) {
 		files := "abcdefgh"
 
 		fromCol := strings.IndexByte(files, notation[0])
-		fromRow := 8 - int(notation[1]-'O') // What does this mean?
+		fromRow := 8 - int(notation[1]-'0') // What does this mean?
 		toCol := strings.IndexByte(files, notation[2])
-		toRow := 8 - int(notation[3]-'O')
+		toRow := 8 - int(notation[3]-'0')
 
 		if fromCol >= 0 && fromRow >= 0 && fromRow < 8 && toCol >= 0 &&
 			toRow >= 0 && toRow < 8 {
